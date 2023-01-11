@@ -28,6 +28,7 @@
 #include "EquivCells.hh"
 #include "Liberty.hh"
 #include "liberty/LibertyReader.hh"
+#include "LibertyVerifier.hh"
 #include "LibertyWriter.hh"
 #include "SdcNetwork.hh"
 #include "MakeConcreteNetwork.hh"
@@ -5610,7 +5611,20 @@ Sta::writeTimingModel(const char *lib_name,
 }
 
 ////////////////////////////////////////////////////////////////
+void
+Sta::verifyTimingModel(const char *lib_name,
+                      const char *cell_name,
+                      const char *filename,
+                      const Corner *corner)
+{
+  printf("HAHAHAHA... ggot the routine");
+  // not very efficient but it works for now.
+  MakeTimingModel maker(corner, this);
+  LibertyLibrary *library = maker.makeTimingModel(lib_name, cell_name, filename);
+  verifyLiberty(library, filename, this);
+}
 
+////////////////////////////////////////////////////////////////
 void
 Sta::powerPreamble()
 {

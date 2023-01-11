@@ -1039,7 +1039,7 @@ define_cmd_args "write_timing_model" {[-corner corner] \
 
 proc write_timing_model { args } {
   parse_key_args "write_timing_model" args \
-    keys {-library_name -cell_name -corner} flags {}
+    keys {-library_name -cell_name -corner} flags {-verify}
   check_argc_eq1 "write_timing_model" $args
 
   set filename [file nativename [lindex $args 0]]
@@ -1053,8 +1053,18 @@ proc write_timing_model { args } {
   } else {
     set lib_name $cell_name
   }
+  if { [info exists flags(-verify)] } {
+    set verify_model 1
+  } else {
+    set verify_model 0
+  }
+
   set corner [parse_corner keys]
   write_timing_model_cmd $lib_name $cell_name $filename $corner
+  if { $verify_model eq 1} {
+    puts "AAAAAAA Calling verify timing model here"
+    verify_timing_model_cmd $lib_name $cell_name $filename $corner
+  }
     
 }
 

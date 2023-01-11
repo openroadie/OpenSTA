@@ -4986,6 +4986,15 @@ write_timing_model_cmd(const char *lib_name,
   Sta::sta()->writeTimingModel(lib_name, cell_name, filename, corner);
 }
 
+void
+verify_timing_model_cmd(const char *lib_name,
+                       const char *cell_name,
+                       const char *filename,
+                       const Corner *corner)
+{
+  Sta::sta()->verifyTimingModel(lib_name, cell_name, filename, corner);
+}
+
 ////////////////////////////////////////////////////////////////
 
 bool

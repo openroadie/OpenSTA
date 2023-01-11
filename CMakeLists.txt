@@ -92,6 +92,7 @@ set(STA_SOURCE
   liberty/LibertyExprPvt.hh
   liberty/LibertyParser.cc
   liberty/LibertyReader.cc
+  liberty/LibertyVerifier.cc  
   liberty/LibertyWriter.cc
   liberty/LinearModel.cc
   liberty/Sequential.cc

@@ -1274,6 +1274,11 @@ public:
                         const char *filename,
                         const Corner *corner);
 
+  void verifyTimingModel(const char *lib_name,
+			 const char *cell_name,
+			 const char *filename,
+			 const Corner *corner);
+
   // Find equivalent cells in equiv_libs.
   // Optionally add mappings for cells in map_libs.
   void makeEquivCells(LibertyLibrarySeq *equiv_libs,
