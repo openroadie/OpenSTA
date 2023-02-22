@@ -31,8 +31,8 @@ using std::max;
 
 typedef Map<ParasiticNode*, double> ParasiticNodeValueMap;
 typedef Map<ParasiticDevice*, double> ParasiticDeviceValueMap;
-typedef Set<ParasiticNode*> ParasiticNodeSet;
 typedef Set<ParasiticDevice*> ParasiticDeviceSet;
+typedef Set<ParasiticNode*> ParasiticNodeSet;
 
 class ReduceToPi : public StaState
 {
@@ -226,7 +226,7 @@ ReduceToPi::pinCapacitance(ParasiticNode *node)
       }
     }
     else if (network_->isTopLevelPort(pin))
-      pin_cap = sdc_->portExtCap(port, rf_, cnst_min_max_);
+      pin_cap = sdc_->portExtCap(port, rf_, corner_, cnst_min_max_);
   }
   return pin_cap;
 }
@@ -314,13 +314,15 @@ reduceToPiElmore(Parasitic *parasitic_network,
     debugPrint(sta->debug(), "parasitic_reduce", 1, "Reduce driver %s",
                sta->network()->pathName(drvr_pin));
     ReduceToPiElmore reducer(sta);
-    reducer.makePiElmore(parasitic_network, drvr_pin, drvr_node,
-			 coupling_cap_factor, RiseFall::rise(),
-			 op_cond, corner, cnst_min_max, ap);
-    if (!reducer.pinCapsOneValue())
+    if (parasitics->checkAnnotation(drvr_pin, drvr_node)) {
       reducer.makePiElmore(parasitic_network, drvr_pin, drvr_node,
-			   coupling_cap_factor, RiseFall::fall(),
-			   op_cond, corner, cnst_min_max, ap);
+                           coupling_cap_factor, RiseFall::rise(),
+                           op_cond, corner, cnst_min_max, ap);
+      if (!reducer.pinCapsOneValue())
+        reducer.makePiElmore(parasitic_network, drvr_pin, drvr_node,
+                             coupling_cap_factor, RiseFall::fall(),
+                             op_cond, corner, cnst_min_max, ap);
+    }
   }
 }
 
@@ -479,13 +481,15 @@ reduceToPiPoleResidue2(Parasitic *parasitic_network,
     debugPrint(sta->debug(), "parasitic_reduce", 1, "Reduce driver %s",
                sta->network()->pathName(drvr_pin));
     ReduceToPiPoleResidue2 reducer(sta);
-    reducer.makePiPoleResidue2(parasitic_network, drvr_pin, drvr_node,
-			       coupling_cap_factor, RiseFall::rise(),
-			       op_cond, corner, cnst_min_max, ap);
-    if (!reducer.pinCapsOneValue())
+    if (parasitics->checkAnnotation(drvr_pin, drvr_node)) {
       reducer.makePiPoleResidue2(parasitic_network, drvr_pin, drvr_node,
-				 coupling_cap_factor, RiseFall::fall(),
-				 op_cond, corner, cnst_min_max, ap);
+                                 coupling_cap_factor, RiseFall::rise(),
+                                 op_cond, corner, cnst_min_max, ap);
+      if (!reducer.pinCapsOneValue())
+        reducer.makePiPoleResidue2(parasitic_network, drvr_pin, drvr_node,
+                                   coupling_cap_factor, RiseFall::fall(),
+                                   op_cond, corner, cnst_min_max, ap);
+    }
   }
 }
 
@@ -531,7 +535,7 @@ ReduceToPiPoleResidue2::findPolesResidues(Parasitic *parasitic_network,
 
   PinConnectedPinIterator *pin_iter = network_->connectedPinIterator(drvr_pin);
   while (pin_iter->hasNext()) {
-    Pin *pin = pin_iter->next();
+    const Pin *pin = pin_iter->next();
     if (network_->isLoad(pin)) {
       ParasiticNode *load_node = parasitics_->findNode(parasitic_network, pin);
       if (load_node) {

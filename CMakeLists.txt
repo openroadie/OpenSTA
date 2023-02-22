@@ -24,7 +24,7 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.14)
 cmake_policy(SET CMP0086 NEW)
 endif()
 
-project(STA VERSION 2.3.2
+project(STA VERSION 2.4.0
   LANGUAGES CXX
 )
 
@@ -222,17 +222,20 @@ set(STA_SOURCE
 set(STA_TCL_FILES
   tcl/Init.tcl
   tcl/Util.tcl
+  tcl/CmdArgs.tcl
+  tcl/CmdUtil.tcl
   tcl/Graph.tcl
   tcl/Liberty.tcl
   tcl/Link.tcl
   tcl/Network.tcl
   tcl/NetworkEdit.tcl
+  tcl/Property.tcl
   tcl/Sdc.tcl
   tcl/Search.tcl
-  tcl/Cmds.tcl
-  tcl/Variables.tcl
   tcl/Sta.tcl
   tcl/Splash.tcl
+  tcl/Variables.tcl
+  tcl/WritePathSpice.tcl
   dcalc/DelayCalc.tcl
   parasitics/Parasitics.tcl
   power/Power.tcl

@@ -286,6 +286,12 @@ proc parse_libcell_inst_net_arg { objects libcells_var insts_var nets_var } {
   get_object_args $objects {} libcells {} {} insts {} {} nets {} {}
 }
 
+proc parse_cell_arg { objects } {
+  set cells {}
+  get_object_args $objects {} {} {} cells {} {} {} {} {} {}
+  return $cells
+}
+
 proc parse_cell_port_args { objects cells_var ports_var } {
   upvar 1 $cells_var cells
   upvar 1 $ports_var ports
@@ -441,6 +447,7 @@ proc parse_corner_or_default { keys_var } {
   }
 }
 
+# Return NULL for all.
 proc parse_corner_or_all { keys_var } {
   upvar 1 $keys_var keys
 

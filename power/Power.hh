@@ -38,7 +38,11 @@ typedef std::pair<const Instance*, LibertyPort*> SeqPin;
 class SeqPinHash
 {
 public:
+  SeqPinHash(const Network *network);
   size_t operator()(const SeqPin &pin) const;
+
+private:
+  const Network *network_;
 };
 
 class SeqPinEqual
@@ -65,10 +69,8 @@ public:
   	     PowerResult &combinational,
 	     PowerResult &macro,
 	     PowerResult &pad);
-  void power(const Instance *inst,
-	     const Corner *corner,
-	     // Return values.
-	     PowerResult &result);
+  PowerResult power(const Instance *inst,
+                    const Corner *corner);
   void setGlobalActivity(float activity,
 			 float duty);
   void setInputActivity(float activity,
@@ -85,6 +87,9 @@ public:
   PwrActivity findClkedActivity(const Pin *pin);
 
 protected:
+  void powerInside(const Instance *hinst,
+                   const Corner *corner,
+                   PowerResult &result);
   void ensureActivities();
   bool hasUserActivity(const Pin *pin);
   PwrActivity &userActivity(const Pin *pin);
@@ -99,11 +104,9 @@ protected:
   void setActivity(const Pin *pin,
 		   PwrActivity &activity);
 
-  void power(const Instance *inst,
-	     LibertyCell *cell,
-	     const Corner *corner,
-	     // Return values.
-	     PowerResult &result);
+  PowerResult power(const Instance *inst,
+                    LibertyCell *cell,
+                    const Corner *corner);
   void findInputInternalPower(const Pin *to_pin,
 			      const LibertyPort *to_port,
 			      const Instance *inst,

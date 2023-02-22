@@ -452,7 +452,7 @@ public:
   FindNetDrvrs(PinSet &drvr_pins,
 	       const Network *network,
 	       const Graph *graph);
-  virtual void operator()(Pin *pin);
+  virtual void operator()(const Pin *pin);
 
 protected:
   PinSet &drvr_pins_;
@@ -470,7 +470,7 @@ FindNetDrvrs::FindNetDrvrs(PinSet &drvr_pins,
 }
 
 void
-FindNetDrvrs::operator()(Pin *pin)
+FindNetDrvrs::operator()(const Pin *pin)
 {
   Vertex *vertex = graph_->pinDrvrVertex(pin);
   if (isLeafDriver(pin, network_)
@@ -491,7 +491,7 @@ GraphDelayCalc1::ensureMultiDrvrNetsFound()
 	Vertex *drvr_vertex = graph_->pinDrvrVertex(pin);
 	if (network_->isDriver(pin)
 	    && !multi_drvr_net_map_.hasKey(drvr_vertex)) {
-	  PinSet drvr_pins;
+	  PinSet drvr_pins(network_);
 	  FindNetDrvrs visitor(drvr_pins, network_, graph_);
 	  network_->visitConnectedPins(pin, visitor);
 	  if (drvr_pins.size() > 1)
@@ -515,7 +515,7 @@ GraphDelayCalc1::makeMultiDrvrNet(PinSet &drvr_pins)
   Vertex *max_drvr = nullptr;
   PinSet::Iterator pin_iter(drvr_pins);
   while (pin_iter.hasNext()) {
-    Pin *pin = pin_iter.next();
+    const Pin *pin = pin_iter.next();
     Vertex *drvr_vertex = graph_->pinDrvrVertex(pin);
     debugPrint(debug_, "delay_calc", 3, " %s",
                network_->pathName(pin));
@@ -581,8 +581,8 @@ GraphDelayCalc1::seedDrvrSlew(Vertex *drvr_vertex,
     for (auto dcalc_ap : corners_->dcalcAnalysisPts()) {
       if (drive) {
 	const MinMax *cnst_min_max = dcalc_ap->constraintMinMax();
-	LibertyCell *drvr_cell;
-	LibertyPort *from_port, *to_port;
+	const LibertyCell *drvr_cell;
+	const LibertyPort *from_port, *to_port;
 	float *from_slews;
 	drive->driveCell(tr, cnst_min_max, drvr_cell, from_port,
 			 from_slews, to_port);
@@ -705,8 +705,8 @@ GraphDelayCalc1::seedLoadSlew(Vertex *vertex)
 // defined in the cell that has a timing group to the output port
 // is used.  Not exactly reasonable, but it's compatible.
 LibertyPort *
-GraphDelayCalc1::driveCellDefaultFromPort(LibertyCell *cell,
-					  LibertyPort *to_port)
+GraphDelayCalc1::driveCellDefaultFromPort(const LibertyCell *cell,
+					  const LibertyPort *to_port)
 {
   LibertyPort *from_port = 0;
   int from_port_index = 0;
@@ -724,8 +724,8 @@ GraphDelayCalc1::driveCellDefaultFromPort(LibertyCell *cell,
 
 // Find the index that port is defined in cell.
 int
-GraphDelayCalc1::findPortIndex(LibertyCell *cell,
-			       LibertyPort *port)
+GraphDelayCalc1::findPortIndex(const LibertyCell *cell,
+			       const LibertyPort *port)
 {
   int index = 0;
   LibertyCellPortIterator port_iter(cell);
@@ -740,14 +740,14 @@ GraphDelayCalc1::findPortIndex(LibertyCell *cell,
 }
 
 void
-GraphDelayCalc1::findInputDriverDelay(LibertyCell *drvr_cell,
+GraphDelayCalc1::findInputDriverDelay(const LibertyCell *drvr_cell,
 				      const Pin *drvr_pin,
 				      Vertex *drvr_vertex,
 				      const RiseFall *rf,
-				      LibertyPort *from_port,
+				      const LibertyPort *from_port,
 				      float *from_slews,
-				      LibertyPort *to_port,
-				      DcalcAnalysisPt *dcalc_ap)
+				      const LibertyPort *to_port,
+				      const DcalcAnalysisPt *dcalc_ap)
 {
   debugPrint(debug_, "delay_calc", 2, "  driver cell %s %s",
              drvr_cell->name(),
@@ -767,12 +767,12 @@ GraphDelayCalc1::findInputDriverDelay(LibertyCell *drvr_cell,
 // delay minus the intrinsic delay.  Driving cell delays are annotated
 // to the wire arcs from the input port pin to the load pins.
 void
-GraphDelayCalc1::findInputArcDelay(LibertyCell *drvr_cell,
+GraphDelayCalc1::findInputArcDelay(const LibertyCell *drvr_cell,
 				   const Pin *drvr_pin,
 				   Vertex *drvr_vertex,
-				   TimingArc *arc,
+				   const TimingArc *arc,
 				   float from_slew,
-				   DcalcAnalysisPt *dcalc_ap)
+				   const DcalcAnalysisPt *dcalc_ap)
 {
   debugPrint(debug_, "delay_calc", 3, "  %s %s -> %s %s (%s)",
              arc->from()->name(),
@@ -1140,7 +1140,7 @@ GraphDelayCalc1::netCaps(const Pin *drvr_pin,
 			 float &fanout,
 			 bool &has_set_load) const
 {
-  MultiDrvrNet *multi_drvr = 0;
+  MultiDrvrNet *multi_drvr = nullptr;
   if (graph_) {
     Vertex *drvr_vertex = graph_->pinDrvrVertex(drvr_pin);
     multi_drvr = multiDrvrNet(drvr_vertex);
@@ -1269,12 +1269,12 @@ GraphDelayCalc1::findArcDelay(LibertyCell *drvr_cell,
     ArcDelay gate_delay;
     Slew gate_slew;
     if (multi_drvr
-	&& network_->direction(drvr_pin)->isOutput())
-      multiDrvrGateDelay(multi_drvr, drvr_cell, drvr_pin, arc,
-			 pvt, dcalc_ap, from_slew, drvr_parasitic,
-			 related_out_cap,
-			 arc_delay_calc,
-			 gate_delay, gate_slew);
+        && arc->to()->direction()->isOutput())
+      parallelGateDelay(multi_drvr, drvr_cell, drvr_pin, arc,
+                        pvt, dcalc_ap, from_slew, drvr_parasitic,
+                        related_out_cap,
+                        arc_delay_calc,
+                        gate_delay, gate_slew);
     else {
       float load_cap = loadCap(drvr_pin, multi_drvr, drvr_parasitic,
 			       drvr_rf, dcalc_ap);
@@ -1312,19 +1312,19 @@ GraphDelayCalc1::findArcDelay(LibertyCell *drvr_cell,
 }
 
 void
-GraphDelayCalc1::multiDrvrGateDelay(MultiDrvrNet *multi_drvr,
-				    LibertyCell *drvr_cell,
-				    const Pin *drvr_pin,
-				    TimingArc *arc,
-				    const Pvt *pvt,
-				    const DcalcAnalysisPt *dcalc_ap,
-				    const Slew from_slew,
-				    Parasitic *drvr_parasitic,
-				    float related_out_cap,
-				    ArcDelayCalc *arc_delay_calc,
-				    // Return values.
-				    ArcDelay &gate_delay,
-				    Slew &gate_slew)
+GraphDelayCalc1::parallelGateDelay(MultiDrvrNet *multi_drvr,
+                                   LibertyCell *drvr_cell,
+                                   const Pin *drvr_pin,
+                                   TimingArc *arc,
+                                   const Pvt *pvt,
+                                   const DcalcAnalysisPt *dcalc_ap,
+                                   const Slew from_slew,
+                                   Parasitic *drvr_parasitic,
+                                   float related_out_cap,
+                                   ArcDelayCalc *arc_delay_calc,
+                                   // Return values.
+                                   ArcDelay &gate_delay,
+                                   Slew &gate_slew)
 {
   ArcDelay intrinsic_delay;
   Slew intrinsic_slew;

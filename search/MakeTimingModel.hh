@@ -40,7 +40,7 @@ public:
   bool rf_path_exists[RiseFall::index_count][RiseFall::index_count];
 };
 
-typedef std::map<ClockEdge*, RiseFallMinMax> ClockEdgeDelays;
+typedef std::map<const ClockEdge*, RiseFallMinMax> ClockEdgeDelays;
 typedef std::map<const Pin *, OutputDelays> OutputPinDelays;
 
 class MakeTimingModel : public StaState
@@ -80,6 +80,9 @@ private:
   TableAxisPtr loadCapacitanceAxis(const TableModel *table);
   LibertyPort *modelPort(const Pin *pin);
 
+  void saveSdc();
+  void restoreSdc();
+
   Sta *sta_;
   LibertyLibrary *library_;
   LibertyCell *cell_;
@@ -87,6 +90,7 @@ private:
   MinMax *min_max_;
   LibertyBuilder *lib_builder_;
   int tbl_template_index_;
+  Sdc *sdc_backup_;
 };
 
 } // namespace

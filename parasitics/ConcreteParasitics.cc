@@ -692,7 +692,7 @@ ConcreteParasiticNetwork::deleteNodes()
 {
   ConcreteParasiticSubNodeMap::Iterator node_iter1(sub_nodes_);
   while (node_iter1.hasNext()) {
-    NetId *net_id;
+    NetIdPair *net_id;
     ConcreteParasiticSubNode *node;
     node_iter1.next(net_id, node);
     delete net_id;
@@ -782,11 +782,11 @@ ConcreteParasiticNode *
 ConcreteParasiticNetwork::ensureParasiticNode(const Net *net,
 					      int id)
 {
-  NetId net_id(net, id);
+  NetIdPair net_id(net, id);
   ConcreteParasiticSubNode *node = sub_nodes_.findKey(&net_id);
   if (node == nullptr) {
     node = new ConcreteParasiticSubNode(net, id);
-    sub_nodes_[new NetId(net, id)] = node;
+    sub_nodes_[new NetIdPair(net, id)] = node;
     max_node_id_ = max((int) max_node_id_, id);
   }
   return node;
@@ -800,7 +800,7 @@ ConcreteParasiticNetwork::findNode(const Pin *pin)
 
 void
 ConcreteParasiticNetwork::disconnectPin(const Pin *pin,
-					Net *net)
+					const Net *net)
 {
   ConcreteParasiticNode *node = pin_nodes_.findKey(pin);
   if (node) {
@@ -831,8 +831,8 @@ ConcreteParasiticNetwork::ensureParasiticNode(const Pin *pin)
 }
 
 bool
-NetIdLess::operator()(const NetId *net_id1,
-		      const NetId *net_id2) const
+NetIdPairLess::operator()(const NetIdPair *net_id1,
+                          const NetIdPair *net_id2) const
 {
   const Net *net1 = net_id1->first;
   const Net *net2 = net_id2->first;
@@ -957,9 +957,9 @@ ConcreteParasitics::capacitance(Parasitic *parasitic) const
 }
 
 bool
-ConcreteParasitics::isReducedParasiticNetwork(Parasitic *parasitic) const
+ConcreteParasitics::isReducedParasiticNetwork(const Parasitic *parasitic) const
 {
-  ConcreteParasitic *cparasitic = static_cast<ConcreteParasitic*>(parasitic);
+  const ConcreteParasitic *cparasitic = static_cast<const ConcreteParasitic*>(parasitic);
   return cparasitic->isReducedParasiticNetwork();
 }
 
@@ -977,7 +977,7 @@ ConcreteParasitics::disconnectPinBefore(const Pin *pin)
   if (haveParasitics()) {
     deleteReducedParasitics(pin);
 
-    Net *net = findParasiticNet(pin);
+    const Net *net = findParasiticNet(pin);
     if (net) {
       ConcreteParasiticNetwork **parasitics = parasitic_network_map_[net];
       if (parasitics) {
@@ -1056,9 +1056,9 @@ ConcreteParasitics::deleteDrvrReducedParasitics(const Pin *drvr_pin,
 ////////////////////////////////////////////////////////////////
 
 bool
-ConcreteParasitics::isPiElmore(Parasitic *parasitic) const
+ConcreteParasitics::isPiElmore(const Parasitic *parasitic) const
 {
-  ConcreteParasitic *cparasitic = static_cast<ConcreteParasitic*>(parasitic);
+  const ConcreteParasitic *cparasitic = static_cast<const ConcreteParasitic*>(parasitic);
   return cparasitic && cparasitic->isPiElmore();
 }
 
@@ -1126,19 +1126,19 @@ ConcreteParasitics::makePiElmore(const Pin *drvr_pin,
 ////////////////////////////////////////////////////////////////
 
 bool
-ConcreteParasitics::isPiModel(Parasitic *parasitic) const
+ConcreteParasitics::isPiModel(const Parasitic *parasitic) const
 {
-  ConcreteParasitic *cparasitic = static_cast<ConcreteParasitic*>(parasitic);
+  const ConcreteParasitic *cparasitic = static_cast<const ConcreteParasitic*>(parasitic);
   return cparasitic && cparasitic->isPiModel();
 }
 
 void
-ConcreteParasitics::piModel(Parasitic *parasitic,
+ConcreteParasitics::piModel(const Parasitic *parasitic,
 			    float &c2,
 			    float &rpi,
 			    float &c1) const
 {
-  ConcreteParasitic *cparasitic = static_cast<ConcreteParasitic*>(parasitic);
+  const ConcreteParasitic *cparasitic = static_cast<const ConcreteParasitic*>(parasitic);
   cparasitic->piModel(c2, rpi, c1);
 }
 
@@ -1155,12 +1155,12 @@ ConcreteParasitics::setPiModel(Parasitic *parasitic,
 ////////////////////////////////////////////////////////////////
 
 void
-ConcreteParasitics::findElmore(Parasitic *parasitic,
+ConcreteParasitics::findElmore(const Parasitic *parasitic,
 			       const Pin *load_pin,
 			       float &elmore,
 			       bool &exists) const
 {
-  ConcreteParasitic *cparasitic = static_cast<ConcreteParasitic*>(parasitic);
+  const ConcreteParasitic *cparasitic = static_cast<const ConcreteParasitic*>(parasitic);
   cparasitic->findElmore(load_pin, elmore, exists);
 }
 
@@ -1176,9 +1176,9 @@ ConcreteParasitics::setElmore(Parasitic *parasitic,
 ////////////////////////////////////////////////////////////////
 
 bool
-ConcreteParasitics::isPiPoleResidue(Parasitic* parasitic) const
+ConcreteParasitics::isPiPoleResidue(const Parasitic* parasitic) const
 {
-  ConcreteParasitic *cparasitic = static_cast<ConcreteParasitic*>(parasitic);
+  const ConcreteParasitic *cparasitic = static_cast<const ConcreteParasitic*>(parasitic);
   return cparasitic && cparasitic->isPiPoleResidue();
 }
 
@@ -1324,7 +1324,7 @@ ConcreteParasitics::findParasiticNetwork(const Pin *pin,
     UniqueLock lock(lock_);
     if (!parasitic_network_map_.empty()) {
       // Only call findParasiticNet if parasitics exist.
-      Net *net = findParasiticNet(pin);
+      const Net *net = findParasiticNet(pin);
       ConcreteParasiticNetwork **parasitics=parasitic_network_map_.findKey(net);
       if (parasitics)
 	return parasitics[ap->index()];
@@ -1606,6 +1606,91 @@ ConcreteParasitics::otherNode(const ParasiticDevice *device,
   const ConcreteParasiticDevice *cdevice =
     static_cast<const ConcreteParasiticDevice*>(device);
   return cdevice->otherNode(node);
+}
+
+////////////////////////////////////////////////////////////////
+
+bool
+ConcreteParasitics::checkAnnotation(Parasitic *parasitic_network,
+                                    const Pin *drvr_pin)
+{
+  ParasiticNode *drvr_node = findNode(parasitic_network, drvr_pin);
+  if (drvr_node)
+    return checkAnnotation(drvr_pin, drvr_node);
+  return false;
+}
+
+bool
+ConcreteParasitics::checkAnnotation(const Pin *drvr_pin,
+                                    ParasiticNode *drvr_node)
+{
+  PinSet unannotated_loads = checkAnnotation1(drvr_pin, drvr_node);
+  return unannotated_loads.empty();
+}
+
+PinSet
+ConcreteParasitics::unannotatedLoads(Parasitic *parasitic_network,
+                                     const Pin *drvr_pin)
+{
+  ParasiticNode *drvr_node = findNode(parasitic_network, drvr_pin);
+  if (drvr_node)
+    return checkAnnotation1(drvr_pin, drvr_node);
+  return PinSet(network_);
+}
+
+PinSet
+ConcreteParasitics::checkAnnotation1(const Pin *drvr_pin,
+                                     ParasiticNode *drvr_node)
+{
+  PinSet loads(network_);
+  NetConnectedPinIterator *pin_iter = network_->connectedPinIterator(drvr_pin);
+  while (pin_iter->hasNext()) {
+    const Pin *pin = pin_iter->next();
+    if (network_->isLoad(pin) && !network_->isHierarchical(pin))
+      loads.insert(pin);
+  }
+  delete pin_iter;
+
+  ParasiticNodeSet visited_nodes;
+  ParasiticDeviceSet loop_resistors;
+  checkAnnotation2(drvr_pin, drvr_node, nullptr, loads,
+                   visited_nodes, loop_resistors);
+  return loads;
+}
+
+void
+ConcreteParasitics::checkAnnotation2(const Pin *drvr_pin,
+                                     ParasiticNode *node,
+                                     ParasiticDevice *from_res,
+                                     PinSet &loads,
+                                     ParasiticNodeSet &visited_nodes,
+                                     ParasiticDeviceSet &loop_resistors)
+{
+  const Pin *pin = parasitics_->connectionPin(node);
+  if (pin)
+    loads.erase(const_cast<Pin*>(pin));
+
+  visited_nodes.insert(node);
+  ParasiticDeviceIterator *device_iter = parasitics_->deviceIterator(node);
+  while (device_iter->hasNext()) {
+    ParasiticDevice *device = device_iter->next();
+    if (parasitics_->isResistor(device)
+        && loop_resistors.find(device) == loop_resistors.end()) {
+      ParasiticNode *onode = parasitics_->otherNode(device, node);
+      // One commercial extractor creates resistors with identical from/to nodes.
+      if (onode != node
+	  && device != from_res) {
+        if (visited_nodes.find(onode) == visited_nodes.end())
+          checkAnnotation2(drvr_pin, onode, device, loads,
+                           visited_nodes, loop_resistors);
+        else
+          // resistor loop
+          loop_resistors.insert(device);
+      }
+    }
+  }
+  delete device_iter;
+  visited_nodes.erase(node);
 }
 
 ////////////////////////////////////////////////////////////////

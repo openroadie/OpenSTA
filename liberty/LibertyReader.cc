@@ -44,6 +44,8 @@ extern int LibertyParse_debug;
 
 namespace sta {
 
+using std::make_shared;
+
 static void
 scaleFloats(FloatSeq *floats,
 	    float scale);
@@ -3564,7 +3566,7 @@ LibertyReader::makeTimingGroup(int line)
 }
 
 void
-LibertyReader::endTiming(LibertyGroup *)
+LibertyReader::endTiming(LibertyGroup *group)
 {
   if (timing_) {
     // Set scale factor type in constraint tables.
@@ -3575,6 +3577,8 @@ LibertyReader::endTiming(LibertyGroup *)
 	model->setScaleFactorType(type);
       }
     }
+    if (timing_->relatedPortNames() == nullptr)
+      libWarn(170, group, "timing group missing related_pin/related_bus_pin.");
     timing_ = nullptr;
   }
 }
@@ -3801,10 +3805,8 @@ LibertyReader::endCellRiseFall(LibertyGroup *group)
                                                scale_factor_type_, rf_);
       timing_->setCell(rf_, table_model);
     }
-    else {
+    else
       libWarn(118, group, "unsupported model axis.");
-      delete table_;
-    }
   }
   endTableModel();
 }
@@ -3830,10 +3832,8 @@ LibertyReader::endRiseFallTransition(LibertyGroup *group)
                                                scale_factor_type_, rf_);
       timing_->setTransition(rf_, table_model);
     }
-    else {
+    else
       libWarn(119, group, "unsupported model axis.");
-      delete table_;
-    }
   }
   endTableModel();
 }
@@ -3861,10 +3861,8 @@ LibertyReader::endRiseFallConstraint(LibertyGroup *group)
                                                scale_factor_type_, rf_);
       timing_->setConstraint(rf_, table_model);
     }
-    else {
+    else
       libWarn(120, group, "unsupported model axis.");
-      delete table_;
-    }
   }
   endTableModel();
 }
@@ -3898,10 +3896,8 @@ LibertyReader::endRiseFallTransitionDegredation(LibertyGroup *group)
                                                scale_factor_type_, rf_);
       library_->setWireSlewDegradationTable(table_model, rf_);
     }
-    else {
+    else
       libWarn(121, group, "unsupported model axis.");
-      delete table_;
-    }
   }
   endTableModel();
 }
@@ -4002,27 +3998,27 @@ LibertyReader::makeTable(LibertyAttr *attr,
       FloatTable *table = makeFloatTable(attr,
 					 axis_[0]->size()*axis_[1]->size(),
 					 axis_[2]->size(), scale);
-      table_ = new Table3(table, axis_[0], axis_[1], axis_[2]);
+      table_ = make_shared<Table3>(table, axis_[0], axis_[1], axis_[2]);
     }
     else if (axis_[0] && axis_[1]) {
       // Row    variable1/axis[0]
       // Column variable2/axis[1]
       FloatTable *table = makeFloatTable(attr, axis_[0]->size(),
 					 axis_[1]->size(), scale);
-      table_ = new Table2(table, axis_[0], axis_[1]);
+      table_ = make_shared<Table2>(table, axis_[0], axis_[1]);
     }
     else if (axis_[0]) {
       FloatTable *table = makeFloatTable(attr, 1, axis_[0]->size(), scale);
       FloatSeq *values = (*table)[0];
       delete table;
-      table_ = new Table1(values, axis_[0]);
+      table_ = make_shared<Table1>(values, axis_[0]);
     }
     else {
       FloatTable *table = makeFloatTable(attr, 1, 1, scale);
       float value = (*(*table)[0])[0];
       delete (*table)[0];
       delete table;
-      table_ = new Table0(value);
+      table_ = make_shared<Table0>(value);
     }
   }
   else
@@ -4130,12 +4126,16 @@ LibertyReader::endLut(LibertyGroup *)
 
 // Find scan ports in test_cell group.
 void
-LibertyReader::beginTestCell(LibertyGroup *)
+LibertyReader::beginTestCell(LibertyGroup *group)
 {
-  test_cell_ = new TestCell;
-  cell_->setTestCell(test_cell_);
-  save_cell_ = cell_;
-  cell_ = nullptr;
+  if (cell_->testCell())
+    libWarn(169, group, "cell %s test_cell redefinition.", cell_->name());
+  else {
+    test_cell_ = new TestCell;
+    cell_->setTestCell(test_cell_);
+    save_cell_ = cell_;
+    cell_ = nullptr;
+  }
 }
 
 void
@@ -4813,10 +4813,8 @@ LibertyReader::endOcvSigmaCell(LibertyGroup *group)
       else
 	timing_->setDelaySigma(rf_, sigma_type_->asMinMax(), table_model);
     }
-    else {
+    else
       libWarn(152, group, "unsupported model axis.");
-      delete table_;
-    }
   }
   endTableModel();
 }
@@ -4847,10 +4845,8 @@ LibertyReader::endOcvSigmaTransition(LibertyGroup *group)
       else
 	timing_->setSlewSigma(rf_, sigma_type_->asMinMax(), table_model);
     }
-    else {
+    else
       libWarn(153, group, "unsupported model axis.");
-      delete table_;
-    }
   }
   endTableModel();
 }
@@ -4881,10 +4877,8 @@ LibertyReader::endOcvSigmaConstraint(LibertyGroup *group)
       else
 	timing_->setConstraintSigma(rf_, sigma_type_->asMinMax(), table_model);
     }
-    else {
+    else
       libWarn(154, group, "unsupported model axis.");
-      delete table_;
-    }
   }
   endTableModel();
 }

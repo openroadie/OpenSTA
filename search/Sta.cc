@@ -82,13 +82,13 @@ using std::max;
 static const ClockEdge *clk_edge_wildcard = reinterpret_cast<ClockEdge*>(1);
 
 static bool
-libertyPortCapsEqual(LibertyPort *port1,
-		     LibertyPort *port2);
+libertyPortCapsEqual(const LibertyPort *port1,
+		     const LibertyPort *port2);
 static bool
 hasDisabledArcs(Edge *edge,
 		Graph *graph);
-static InstanceSet *
-pinInstances(PinSet *pins,
+static InstanceSet
+pinInstances(PinSet &pins,
 	     const Network *network);
 
 ////////////////////////////////////////////////////////////////
@@ -800,7 +800,7 @@ Sta::setOperatingConditions(OperatingConditions *op_cond,
   search_->arrivalsInvalid();
 }
 
-Pvt *
+const Pvt *
 Sta::pvt(Instance *inst,
 	 const MinMax *min_max)
 {
@@ -814,14 +814,14 @@ Sta::setPvt(Instance *inst,
 	    float voltage,
 	    float temperature)
 {
-  Pvt *pvt = new Pvt(process, voltage, temperature);
+  Pvt pvt(process, voltage, temperature);
   setPvt(inst, min_max, pvt);
 }
 
 void
-Sta::setPvt(Instance *inst,
+Sta::setPvt(const Instance *inst,
 	    const MinMaxAll *min_max,
-	    Pvt *pvt)
+	    const Pvt &pvt)
 {
   sdc_->setPvt(inst, min_max, pvt);
   delaysInvalidFrom(inst);
@@ -891,7 +891,7 @@ Sta::unsetTimingDerate()
 }
 
 void
-Sta::setInputSlew(Port *port,
+Sta::setInputSlew(const Port *port,
 		  const RiseFallBoth *rf,
 		  const MinMaxAll *min_max,
 		  float slew)
@@ -901,12 +901,12 @@ Sta::setInputSlew(Port *port,
 }
 
 void
-Sta::setDriveCell(LibertyLibrary *library,
-		  LibertyCell *cell,
-		  Port *port,
-		  LibertyPort *from_port,
+Sta::setDriveCell(const LibertyLibrary *library,
+		  const LibertyCell *cell,
+		  const Port *port,
+		  const LibertyPort *from_port,
 		  float *from_slews,
-		  LibertyPort *to_port,
+		  const LibertyPort *to_port,
 		  const RiseFallBoth *rf,
 		  const MinMaxAll *min_max)
 {
@@ -916,7 +916,7 @@ Sta::setDriveCell(LibertyLibrary *library,
 }
 
 void
-Sta::setDriveResistance(Port *port,
+Sta::setDriveResistance(const Port *port,
 			const RiseFallBoth *rf,
 			const MinMaxAll *min_max,
 			float res)
@@ -926,7 +926,7 @@ Sta::setDriveResistance(Port *port,
 }
 
 void
-Sta::setLatchBorrowLimit(Pin *pin,
+Sta::setLatchBorrowLimit(const Pin *pin,
 			 float limit)
 {
   sdc_->setLatchBorrowLimit(pin, limit);
@@ -934,7 +934,7 @@ Sta::setLatchBorrowLimit(Pin *pin,
 }
 
 void
-Sta::setLatchBorrowLimit(Instance *inst,
+Sta::setLatchBorrowLimit(const Instance *inst,
 			 float limit)
 {
   sdc_->setLatchBorrowLimit(inst, limit);
@@ -942,7 +942,7 @@ Sta::setLatchBorrowLimit(Instance *inst,
 }
 
 void
-Sta::setLatchBorrowLimit(Clock *clk,
+Sta::setLatchBorrowLimit(const Clock *clk,
 			 float limit)
 {
   sdc_->setLatchBorrowLimit(clk, limit);
@@ -1184,7 +1184,7 @@ Sta::removeClockSlew(Clock *clk)
 void
 Sta::clockSlewChanged(Clock *clk)
 {
-  for (Pin *pin : clk->pins())
+  for (const Pin *pin : clk->pins())
     graph_delay_calc_->delayInvalid(pin);
   search_->arrivalsInvalid();
 }
@@ -1599,11 +1599,11 @@ Sta::disableAfter()
 
 ////////////////////////////////////////////////////////////////
 
-EdgeSeq *
+EdgeSeq
 Sta::disabledEdges()
 {
   ensureLevelized();
-  EdgeSeq *disabled_edges = new EdgeSeq;
+  EdgeSeq disabled_edges;
   VertexIterator vertex_iter(graph_);
   while (vertex_iter.hasNext()) {
     Vertex *vertex = vertex_iter.next();
@@ -1615,18 +1615,18 @@ Sta::disabledEdges()
 	  || isDisabledConstraint(edge)
 	  || edge->isDisabledLoop()
 	  || isDisabledPresetClr(edge))
-	disabled_edges->push_back(edge);
+	disabled_edges.push_back(edge);
     }
   }
   return disabled_edges;
 }
 
 
-EdgeSeq *
+EdgeSeq
 Sta::disabledEdgesSorted()
 {
-  EdgeSeq *disabled_edges = disabledEdges();
-  sortEdges(disabled_edges, network_, graph_);
+  EdgeSeq disabled_edges = disabledEdges();
+  sortEdges(&disabled_edges, network_, graph_);
   return disabled_edges;
 }
 
@@ -1687,23 +1687,23 @@ Sta::isDisabledCondDefault(Edge *edge)
   return sdc_->isDisabledCondDefault(edge);
 }
 
-PinSet *
+PinSet
 Sta::disabledConstantPins(Edge *edge)
 {
   sim_->ensureConstantsPropagated();
-  PinSet *pins = new PinSet;
+  PinSet pins(network_);
   Vertex *from_vertex = edge->from(graph_);
   Pin *from_pin = from_vertex->pin();
   Vertex *to_vertex = edge->to(graph_);
-  Pin *to_pin = to_vertex->pin();
+  const Pin *to_pin = to_vertex->pin();
   if (sim_->logicZeroOne(from_vertex))
-    pins->insert(from_pin);
+    pins.insert(from_pin);
   if (edge->role()->isWire()) {
     if (sim_->logicZeroOne(to_vertex))
-      pins->insert(to_pin);
+      pins.insert(to_pin);
   }
   else {
-    Instance *inst = network_->instance(to_pin);
+    const Instance *inst = network_->instance(to_pin);
     bool is_disabled;
     FuncExpr *disable_cond;
     isCondDisabled(edge, inst, from_pin, to_pin, network_, sim_,
@@ -1718,7 +1718,7 @@ Sta::disabledConstantPins(Edge *edge)
     isTestDisabled(inst, from_pin, to_pin, network_, sim_,
 		   is_disabled, scan_enable);
     if (is_disabled)
-      pins->insert(scan_enable);
+      pins.insert(scan_enable);
     if (hasDisabledArcs(edge, graph_)) {
       LibertyPort *to_port = network_->libertyPort(to_pin);
       if (to_port) {
@@ -1742,7 +1742,9 @@ Sta::simTimingSense(Edge *edge)
 }
 
 void
-Sta::exprConstantPins(FuncExpr *expr, Instance *inst, PinSet *pins)
+Sta::exprConstantPins(FuncExpr *expr,
+                      const Instance *inst,
+                      PinSet &pins)
 {
   FuncExprPortIterator port_iter(expr);
   while (port_iter.hasNext()) {
@@ -1751,7 +1753,7 @@ Sta::exprConstantPins(FuncExpr *expr, Instance *inst, PinSet *pins)
     if (pin) {
       LogicValue value = sim_->logicValue(pin);
       if (value != LogicValue::unknown)
-	pins->insert(pin);
+	pins.insert(pin);
     }
   }
 }
@@ -2405,6 +2407,7 @@ Sta::makeCorners()
   corner_names.insert("default");
   corners_->makeCorners(&corner_names);
   cmd_corner_ = corners_->findCorner(0);
+  sdc_->makeCornersAfter(corners_);
 }
 
 void
@@ -2414,6 +2417,8 @@ Sta::makeCorners(StringSet *corner_names)
   corners_->makeCorners(corner_names);
   makeParasiticAnalysisPts();
   cmd_corner_ = corners_->findCorner(0);
+  updateComponentsState();
+  sdc_->makeCornersAfter(corners_);
 }
 
 Corner *
@@ -2433,7 +2438,7 @@ Sta::setCmdCorner(Corner *corner)
 // from/thrus/to are owned and deleted by Search.
 // Returned sequence is owned by the caller.
 // PathEnds are owned by Search PathGroups and deleted on next call.
-PathEndSeq *
+PathEndSeq
 Sta::findPathEnds(ExceptionFrom *from,
 		  ExceptionThruSeq *thrus,
 		  ExceptionTo *to,
@@ -2640,51 +2645,47 @@ Sta::visitEndpoints(VertexVisitor *visitor)
   search_->visitEndpoints(visitor);
 }
 
-class EndpointCounter : public VertexVisitor
-{
-public:
-  EndpointCounter() : count_(0) {}
-  virtual void visit(Vertex *) { count_++; }
-  int count() const { return count_; }
-  virtual EndpointCounter *copy()  const { return new EndpointCounter; }
-protected:
-  int count_;
-};
-
-int
-Sta::endpointCount()
+VertexSet *
+Sta::endpoints()
 {
   ensureGraph();
-  EndpointCounter counter;
-  search_->visitEndpoints(&counter);
-  return counter.count();
+  return search_->endpoints();
 }
 
-PinSet *
+int
+Sta::endpointViolationCount(const MinMax *min_max)
+{
+  int violations = 0;
+  for (Vertex *end : *search_->endpoints()) {
+    if (vertexSlack(end, min_max) < 0.0)
+      violations++;
+  }
+  return violations;
+}
+
+PinSet
 Sta::findGroupPathPins(const char *group_path_name)
 {
   if (!(search_->havePathGroups()
         && search_->arrivalsValid())) {
-    PathEndSeq *path_ends = findPathEnds(// from, thrus, to, unconstrained
-					 nullptr, nullptr, nullptr, false,
-					 // corner, min_max, 
-					 nullptr, MinMaxAll::max(),
-					 // group_count, endpoint_count, unique_pins
-					 1, 1, false,
-					 -INF, INF, // slack_min, slack_max,
-					 false, // sort_by_slack
-					 nullptr, // group_names
-					 // setup, hold, recovery, removal, 
-					 true, true, true, true,
-					 // clk_gating_setup, clk_gating_hold
-					 true, true);
-    // No use for the path end sequence.
-    delete path_ends;
+    PathEndSeq path_ends = findPathEnds(// from, thrus, to, unconstrained
+                                        nullptr, nullptr, nullptr, false,
+                                        // corner, min_max, 
+                                        nullptr, MinMaxAll::max(),
+                                        // group_count, endpoint_count, unique_pins
+                                        1, 1, false,
+                                        -INF, INF, // slack_min, slack_max,
+                                        false, // sort_by_slack
+                                        nullptr, // group_names
+                                        // setup, hold, recovery, removal, 
+                                        true, true, true, true,
+                                        // clk_gating_setup, clk_gating_hold
+                                        true, true);
   }
 
   PathGroup *path_group = search_->findPathGroup(group_path_name,
 						 MinMax::max());
-  PinSet *pins = new PinSet;
+  PinSet pins(network_);
   VertexPinCollector visitor(pins);
   visitPathGroupVertices(path_group, &visitor, this);
   return pins;
@@ -2917,7 +2918,7 @@ Sta::netSlack(const Net *net,
   Slack slack = MinMax::min()->initValue();
   NetPinIterator *pin_iter = network_->pinIterator(net);
   while (pin_iter->hasNext()) {
-    Pin *pin = pin_iter->next();
+    const Pin *pin = pin_iter->next();
     if (network_->isLoad(pin)) {
       Vertex *vertex = graph_->pinLoadVertex(pin);
       Slack pin_slack = vertexSlack(vertex, min_max);
@@ -3104,8 +3105,8 @@ MinPeriodEndVisitor::visit(PathEnd *path_end)
 {
   Network *network = sta_->network();
   Path *path = path_end->path();
-  ClockEdge *src_edge = path_end->sourceClkEdge(sta_);
-  ClockEdge *tgt_edge = path_end->targetClkEdge(sta_);
+  const ClockEdge *src_edge = path_end->sourceClkEdge(sta_);
+  const ClockEdge *tgt_edge = path_end->targetClkEdge(sta_);
   PathEnd::Type end_type = path_end->type();
   if ((end_type == PathEnd::Type::check
        || end_type == PathEnd::Type::output_delay)
@@ -3620,21 +3621,28 @@ Sta::clearLogicConstants()
 }
 
 void
-Sta::setPortExtPinCap(Port *port,
+Sta::setPortExtPinCap(const Port *port,
 		      const RiseFallBoth *rf,
+                      const Corner *corner,
 		      const MinMaxAll *min_max,
 		      float cap)
 {
   for (RiseFall *rf1 : rf->range()) {
     for (MinMax *mm : min_max->range()) {
-      sdc_->setPortExtPinCap(port, rf1, mm, cap);
+      if (corner == nullptr) {
+        for (Corner *corner : *corners_)
+          sdc_->setPortExtPinCap(port, rf1, corner, mm, cap);
+      }
+      else
+        sdc_->setPortExtPinCap(port, rf1, corner, mm, cap);
     }
   }
   delaysInvalidFromFanin(port);
 }
 
 void
-Sta::portExtCaps(Port *port,
+Sta::portExtCaps(const Port *port,
+                 const Corner *corner,
                  const MinMax *min_max,
                  float &pin_cap,
                  float &wire_cap,
@@ -3650,7 +3658,7 @@ Sta::portExtCaps(Port *port,
     float pin_cap1, wire_cap1;
     int fanout1;
     bool pin_exists1, wire_exists1, fanout_exists1;
-    sdc_->portExtCap(port, rf, min_max,
+    sdc_->portExtCap(port, rf, corner, min_max,
                      pin_cap1, pin_exists1,
                      wire_cap1, wire_exists1,
                      fanout1, fanout_exists1);
@@ -3676,60 +3684,63 @@ Sta::portExtCaps(Port *port,
 }
 
 void
-Sta::setPortExtWireCap(Port *port,
+Sta::setPortExtWireCap(const Port *port,
 		       bool subtract_pin_cap,
 		       const RiseFallBoth *rf,
+                       const Corner *corner,
 		       const MinMaxAll *min_max,
 		       float cap)
 {
-  Corner *corner = cmd_corner_;
   for (RiseFall *rf1 : rf->range()) {
     for (MinMax *mm : min_max->range()) {
-      sdc_->setPortExtWireCap(port, subtract_pin_cap, rf1, corner, mm, cap);
+      if (corner == nullptr) {
+        for (Corner *corner : *corners_)
+          sdc_->setPortExtWireCap(port, subtract_pin_cap, rf1, corner, mm, cap);
+      }
+      else
+        sdc_->setPortExtWireCap(port, subtract_pin_cap, rf1, corner, mm, cap);
     }
   }
   delaysInvalidFromFanin(port);
 }
 
 void
-Sta::removeNetLoadCaps() const
-{
-  sdc_->removeNetLoadCaps();
-  graph_delay_calc_->delaysInvalid();
-}
-
-void
-Sta::setPortExtFanout(Port *port,
+Sta::setPortExtFanout(const Port *port,
 		      int fanout,
+                      const Corner *corner,
 		      const MinMaxAll *min_max)
 {
-  for (MinMax *mm : min_max->range())
-    sdc_->setPortExtFanout(port, mm, fanout);
+  for (MinMax *mm : min_max->range()) {
+    if (corner == nullptr) {
+      for (Corner *corner : *corners_)
+        sdc_->setPortExtFanout(port, corner, mm, fanout);
+    }
+    else
+      sdc_->setPortExtFanout(port, corner, mm, fanout);
+  }
   delaysInvalidFromFanin(port);
 }
 
 void
-Sta::setNetWireCap(Net *net,
+Sta::setNetWireCap(const Net *net,
 		   bool subtract_pin_cap,
 		   const Corner *corner,
 		   const MinMaxAll *min_max,
 		   float cap)
 {
-  if (corner == nullptr) {
-    for (Corner *corner : *corners_) {
-      for (MinMax *mm : min_max->range())
+  for (MinMax *mm : min_max->range()) {
+    if (corner == nullptr) {
+      for (Corner *corner : *corners_)
         sdc_->setNetWireCap(net, subtract_pin_cap, corner, mm, cap);
     }
-  }
-  else {
-    for (MinMax *mm : min_max->range())
+    else
       sdc_->setNetWireCap(net, subtract_pin_cap, corner, mm, cap);
   }
   delaysInvalidFromFanin(net);
 }
 
 void
-Sta::connectedCap(Pin *drvr_pin,
+Sta::connectedCap(const Pin *drvr_pin,
 		  const RiseFall *rf,
 		  const Corner *corner,
 		  const MinMax *min_max,
@@ -3755,13 +3766,13 @@ Sta::connectedCap(Pin *drvr_pin,
 }
 
 void
-Sta::connectedCap(Net *net,
+Sta::connectedCap(const Net *net,
 		  Corner *corner,
 		  const MinMax *min_max,
 		  float &pin_cap,
 		  float &wire_cap) const
 {
-  Pin *drvr_pin = findNetParasiticDrvrPin(net);
+  const Pin *drvr_pin = findNetParasiticDrvrPin(net);
   if (drvr_pin) {
     pin_cap = min_max->initValue();
     wire_cap = min_max->initValue();
@@ -3808,13 +3819,13 @@ Sta::capacitance(const LibertyPort *port,
 
 // Look for a driver to find a parasitic if the net has one.
 // Settle for a load pin if there are no drivers.
-Pin *
-Sta::findNetParasiticDrvrPin(Net *net) const
+const Pin *
+Sta::findNetParasiticDrvrPin(const Net *net) const
 {
-  Pin *load_pin = nullptr;
+  const Pin *load_pin = nullptr;
   NetConnectedPinIterator *pin_iter = network_->connectedPinIterator(net);
   while (pin_iter->hasNext()) {
-    Pin *pin = pin_iter->next();
+    const Pin *pin = pin_iter->next();
     if (network_->isDriver(pin)) {
       delete pin_iter;
       return pin;
@@ -3827,7 +3838,7 @@ Sta::findNetParasiticDrvrPin(Net *net) const
 }
 
 void
-Sta::setResistance(Net *net,
+Sta::setResistance(const Net *net,
 		   const MinMaxAll *min_max,
 		   float res)
 {
@@ -4114,7 +4125,7 @@ Sta::disconnectPin(Pin *pin)
 ////////////////////////////////////////////////////////////////
 
 void
-Sta::makeInstanceAfter(Instance *inst)
+Sta::makeInstanceAfter(const Instance *inst)
 {
   if (graph_) {
     LibertyCell *lib_cell = network_->libertyCell(inst);
@@ -4136,8 +4147,8 @@ Sta::makeInstanceAfter(Instance *inst)
 }
 
 void
-Sta::replaceEquivCellBefore(Instance *inst,
-			    LibertyCell *to_cell)
+Sta::replaceEquivCellBefore(const Instance *inst,
+			    const LibertyCell *to_cell)
 {
   if (graph_) {
     InstancePinIterator *pin_iter = network_->pinIterator(inst);
@@ -4177,7 +4188,7 @@ Sta::replaceEquivCellBefore(Instance *inst,
 }
 
 void
-Sta::replaceEquivCellAfter(Instance *inst)
+Sta::replaceEquivCellAfter(const Instance *inst)
 {
   if (graph_) {
     InstancePinIterator *pin_iter = network_->pinIterator(inst);
@@ -4191,9 +4202,9 @@ Sta::replaceEquivCellAfter(Instance *inst)
 }
 
 void
-Sta::replaceCellPinInvalidate(LibertyPort *from_port,
+Sta::replaceCellPinInvalidate(const LibertyPort *from_port,
 			      Vertex *vertex,
-			      LibertyCell *to_cell)
+			      const LibertyCell *to_cell)
 {
   LibertyPort *to_port = to_cell->findLibertyPort(from_port->name());
   if (to_port == nullptr
@@ -4220,8 +4231,8 @@ Sta::idealClockMode()
 }
 
 static bool
-libertyPortCapsEqual(LibertyPort *port1,
-		     LibertyPort *port2)
+libertyPortCapsEqual(const LibertyPort *port1,
+		     const LibertyPort *port2)
 {
   return port1->capacitance(RiseFall::rise(), MinMax::min())
     == port2->capacitance(RiseFall::rise(), MinMax::min())
@@ -4234,8 +4245,8 @@ libertyPortCapsEqual(LibertyPort *port1,
 }
 
 void
-Sta::replaceCellBefore(Instance *inst,
-		       LibertyCell *to_cell)
+Sta::replaceCellBefore(const Instance *inst,
+		       const LibertyCell *to_cell)
 {
   if (graph_) {
     // Delete all graph edges between instance pins.
@@ -4261,7 +4272,7 @@ Sta::replaceCellBefore(Instance *inst,
 }
 
 void
-Sta::replaceCellAfter(Instance *inst)
+Sta::replaceCellAfter(const Instance *inst)
 {
   if (graph_) {
     graph_->makeInstanceEdges(inst);
@@ -4277,7 +4288,7 @@ Sta::replaceCellAfter(Instance *inst)
 }
 
 void
-Sta::connectPinAfter(Pin *pin)
+Sta::connectPinAfter(const Pin *pin)
 {
   if (graph_) {
     if (network_->isHierarchical(pin)) {
@@ -4363,7 +4374,7 @@ Sta::connectLoadPinAfter(Vertex *vertex)
 }
 
 void
-Sta::disconnectPinBefore(Pin *pin)
+Sta::disconnectPinBefore(const Pin *pin)
 {
   parasitics_->disconnectPinBefore(pin);
   sdc_->disconnectPinBefore(pin);
@@ -4424,12 +4435,12 @@ Sta::deleteEdge(Edge *edge)
 }
 
 void
-Sta::deleteNetBefore(Net *net)
+Sta::deleteNetBefore(const Net *net)
 {
   if (graph_) {
     NetConnectedPinIterator *pin_iter = network_->connectedPinIterator(net);
     while (pin_iter->hasNext()) {
-      Pin *pin = pin_iter->next();
+      const Pin *pin = pin_iter->next();
       if (!network_->isHierarchical(pin)) {
 	disconnectPinBefore(pin);
 	// Delete wire edges on net pins.
@@ -4450,7 +4461,7 @@ Sta::deleteNetBefore(Net *net)
 }
 
 void
-Sta::deleteInstanceBefore(Instance *inst)
+Sta::deleteInstanceBefore(const Instance *inst)
 {
   if (network_->isLeaf(inst)) {
     deleteInstancePinsBefore(inst);
@@ -4468,13 +4479,13 @@ Sta::deleteInstanceBefore(Instance *inst)
 }
 
 void
-Sta::deleteLeafInstanceBefore(Instance *inst)
+Sta::deleteLeafInstanceBefore(const Instance *inst)
 {
   sim_->deleteInstanceBefore(inst);
 }
 
 void
-Sta::deleteInstancePinsBefore(Instance *inst)
+Sta::deleteInstancePinsBefore(const Instance *inst)
 {
   InstancePinIterator *pin_iter = network_->pinIterator(inst);
   while (pin_iter->hasNext()) {
@@ -4485,7 +4496,7 @@ Sta::deleteInstancePinsBefore(Instance *inst)
 }
 
 void
-Sta::deletePinBefore(Pin *pin)
+Sta::deletePinBefore(const Pin *pin)
 {
   if (graph_) {
     if (network_->isLoad(pin)) {
@@ -4547,7 +4558,7 @@ Sta::deletePinBefore(Pin *pin)
 }
 
 void
-Sta::delaysInvalidFrom(Port *port)
+Sta::delaysInvalidFrom(const Port *port)
 {
   if (graph_) {
     Instance *top_inst = network_->topInstance();
@@ -4557,7 +4568,7 @@ Sta::delaysInvalidFrom(Port *port)
 }
 
 void
-Sta::delaysInvalidFrom(Instance *inst)
+Sta::delaysInvalidFrom(const Instance *inst)
 {
   if (graph_) {
     InstancePinIterator *pin_iter = network_->pinIterator(inst);
@@ -4570,7 +4581,7 @@ Sta::delaysInvalidFrom(Instance *inst)
 }
 
 void
-Sta::delaysInvalidFrom(Pin *pin)
+Sta::delaysInvalidFrom(const Pin *pin)
 {
   if (graph_) {
     Vertex *vertex, *bidirect_drvr_vertex;
@@ -4590,7 +4601,7 @@ Sta::delaysInvalidFrom(Vertex *vertex)
 }
 
 void
-Sta::delaysInvalidFromFanin(Port *port)
+Sta::delaysInvalidFromFanin(const Port *port)
 {
   if (graph_) {
     Instance *top_inst = network_->topInstance();
@@ -4604,7 +4615,7 @@ Sta::delaysInvalidFromFanin(Port *port)
 }
 
 void
-Sta::delaysInvalidFromFanin(Pin *pin)
+Sta::delaysInvalidFromFanin(const Pin *pin)
 {
   if (graph_) {
     Vertex *vertex, *bidirect_drvr_vertex;
@@ -4617,12 +4628,12 @@ Sta::delaysInvalidFromFanin(Pin *pin)
 }
 
 void
-Sta::delaysInvalidFromFanin(Net *net)
+Sta::delaysInvalidFromFanin(const Net *net)
 {
   if (graph_) {
     NetConnectedPinIterator *pin_iter = network_->connectedPinIterator(net);
     while (pin_iter->hasNext()) {
-      Pin *pin = pin_iter->next();
+      const Pin *pin = pin_iter->next();
       if (!network_->isHierarchical(pin)) {
 	Vertex *vertex, *bidirect_drvr_vertex;
 	graph_->pinVertices(pin, vertex, bidirect_drvr_vertex);
@@ -4650,18 +4661,16 @@ Sta::delaysInvalidFromFanin(Vertex *vertex)
 
 ////////////////////////////////////////////////////////////////
 
-void
-Sta::clocks(const Pin *pin,
-	    // Return value.
-	    ClockSet &clks)
+ClockSet
+Sta::clocks(const Pin *pin)
 {
   ensureClkArrivals();
-  search_->clocks(pin, clks);
+  return search_->clocks(pin);
 }
 
 ////////////////////////////////////////////////////////////////
 
-InstanceSet *
+InstanceSet
 Sta::findRegisterInstances(ClockSet *clks,
 			   const RiseFallBoth *clk_rf,
 			   bool edge_triggered,
@@ -4671,7 +4680,7 @@ Sta::findRegisterInstances(ClockSet *clks,
   return findRegInstances(clks, clk_rf, edge_triggered, latches, this);
 }
 
-PinSet *
+PinSet
 Sta::findRegisterDataPins(ClockSet *clks,
 			  const RiseFallBoth *clk_rf,
 			  bool edge_triggered,
@@ -4681,7 +4690,7 @@ Sta::findRegisterDataPins(ClockSet *clks,
   return findRegDataPins(clks, clk_rf, edge_triggered, latches, this);
 }
 
-PinSet *
+PinSet
 Sta::findRegisterClkPins(ClockSet *clks,
 			 const RiseFallBoth *clk_rf,
 			 bool edge_triggered,
@@ -4691,7 +4700,7 @@ Sta::findRegisterClkPins(ClockSet *clks,
   return findRegClkPins(clks, clk_rf, edge_triggered, latches, this);
 }
 
-PinSet *
+PinSet
 Sta::findRegisterAsyncPins(ClockSet *clks,
 			   const RiseFallBoth *clk_rf,
 			   bool edge_triggered,
@@ -4701,7 +4710,7 @@ Sta::findRegisterAsyncPins(ClockSet *clks,
   return findRegAsyncPins(clks, clk_rf, edge_triggered, latches, this);
 }
 
-PinSet *
+PinSet
 Sta::findRegisterOutputPins(ClockSet *clks,
 			    const RiseFallBoth *clk_rf,
 			    bool edge_triggered,
@@ -4833,7 +4842,7 @@ FaninSrchPred::searchThruRole(Edge *edge)
     || role == TimingRole::latchEnToQ();
 }
 
-PinSet *
+PinSet
 Sta::findFaninPins(PinSeq *to,
 		   bool flat,
 		   bool startpoints_only,
@@ -4844,11 +4853,11 @@ Sta::findFaninPins(PinSeq *to,
 {
   ensureGraph();
   ensureLevelized();
-  PinSet *fanin = new PinSet;
+  PinSet fanin(network_);
   FaninSrchPred pred(thru_disabled, thru_constants, this);
   PinSeq::Iterator to_iter(to);
   while (to_iter.hasNext()) {
-    Pin *pin = to_iter.next();
+    const Pin *pin = to_iter.next();
     if (network_->isHierarchical(pin)) {
       EdgesThruHierPinIterator edge_iter(pin, network_, graph_);
       while (edge_iter.hasNext()) {
@@ -4872,7 +4881,7 @@ Sta::findFaninPins(Vertex *vertex,
 		   bool startpoints_only,
 		   int inst_levels,
 		   int pin_levels,
-		   PinSet *fanin,
+		   PinSet &fanin,
 		   SearchPred &pred)
 {
   VertexSet visited(graph_);
@@ -4885,7 +4894,7 @@ Sta::findFaninPins(Vertex *vertex,
     if (!startpoints_only
 	|| network_->isRegClkPin(visited_pin)
 	|| !hasFanin(visited_vertex, &pred, graph_))
-      fanin->insert(visited_pin);
+      fanin.insert(visited_pin);
   }
 }
 
@@ -4929,7 +4938,7 @@ Sta::findFaninPins(Vertex *to,
   }
 }
 
-InstanceSet *
+InstanceSet
 Sta::findFaninInstances(PinSeq *to,
 			bool flat,
 			bool startpoints_only,
@@ -4938,12 +4947,12 @@ Sta::findFaninInstances(PinSeq *to,
 			bool thru_disabled,
 			bool thru_constants)
 {
-  PinSet *pins = findFaninPins(to, flat, startpoints_only, inst_levels,
-			       pin_levels, thru_disabled, thru_constants);
+  PinSet pins = findFaninPins(to, flat, startpoints_only, inst_levels,
+                              pin_levels, thru_disabled, thru_constants);
   return pinInstances(pins, network_);
 }
 
-PinSet *
+PinSet
 Sta::findFanoutPins(PinSeq *from,
 		    bool flat,
 		    bool endpoints_only,
@@ -4954,11 +4963,11 @@ Sta::findFanoutPins(PinSeq *from,
 {
   ensureGraph();
   ensureLevelized();
-  PinSet *fanout = new PinSet;
+  PinSet fanout(network_);
   FanInOutSrchPred pred(thru_disabled, thru_constants, this);
   PinSeq::Iterator from_iter(from);
   while (from_iter.hasNext()) {
-    Pin *pin = from_iter.next();
+    const Pin *pin = from_iter.next();
     if (network_->isHierarchical(pin)) {
       EdgesThruHierPinIterator edge_iter(pin, network_, graph_);
       while (edge_iter.hasNext()) {
@@ -4982,7 +4991,7 @@ Sta::findFanoutPins(Vertex *vertex,
 		    bool endpoints_only,
 		    int inst_levels,
 		    int pin_levels,
-		    PinSet *fanout,
+		    PinSet &fanout,
 		    SearchPred &pred)
 {
   VertexSet visited(graph_);
@@ -4994,7 +5003,7 @@ Sta::findFanoutPins(Vertex *vertex,
     Pin *visited_pin = visited_vertex->pin();
     if (!endpoints_only
 	|| search_->isEndpoint(visited_vertex, &pred))
-      fanout->insert(visited_pin);
+      fanout.insert(visited_pin);
   }
 }
 
@@ -5037,7 +5046,7 @@ Sta::findFanoutPins(Vertex *from,
   }
 }
 
-InstanceSet *
+InstanceSet
 Sta::findFanoutInstances(PinSeq *from,
 			 bool flat,
 			 bool endpoints_only,
@@ -5046,22 +5055,18 @@ Sta::findFanoutInstances(PinSeq *from,
 			 bool thru_disabled,
 			 bool thru_constants)
 {
-  PinSet *pins = findFanoutPins(from, flat, endpoints_only, inst_levels,
-				pin_levels, thru_disabled, thru_constants);
+  PinSet pins = findFanoutPins(from, flat, endpoints_only, inst_levels,
+                               pin_levels, thru_disabled, thru_constants);
   return pinInstances(pins, network_);
 }
 
-static InstanceSet *
-pinInstances(PinSet *pins,
+static InstanceSet
+pinInstances(PinSet &pins,
 	     const Network *network)
 {
-  InstanceSet *insts = new InstanceSet;
-  PinSet::Iterator pin_iter(pins);
-  while (pin_iter.hasNext()) {
-    Pin *pin = pin_iter.next();
-    insts->insert(network->instance(pin));
-  }
-  delete pins;
+  InstanceSet insts(network);
+  for (const Pin *pin : pins)
+    insts.insert(network->instance(pin));
   return insts;
 }
 
@@ -5166,7 +5171,7 @@ Sta::checkSlewLimitPreamble()
   ensureClkNetwork();
 }
 
-PinSeq *
+PinSeq
 Sta::checkSlewLimits(Net *net,
                      bool violators,
                      const Corner *corner,
@@ -5231,26 +5236,25 @@ Sta::checkSlew(const Pin *pin,
 
 void
 Sta::maxSlewCheck(// Return values.
-                  Pin *&pin,
+                  const Pin *&pin,
                   Slew &slew,
                   float &slack,
                   float &limit)
 {
   checkSlewLimitPreamble();
-  PinSeq *pins = check_slew_limits_->checkSlewLimits(nullptr, false, nullptr,
-                                                     MinMax::max());
+  PinSeq pins = check_slew_limits_->checkSlewLimits(nullptr, false, nullptr,
+                                                    MinMax::max());
   pin = nullptr;
   slew = 0.0;
   slack = INF;
   limit = INF;
-  if (!pins->empty()) {
-    pin = (*pins)[0];
+  if (!pins.empty()) {
+    pin = pins[0];
     const Corner *corner;
     const RiseFall *rf;
     check_slew_limits_->checkSlew(pin, nullptr, MinMax::max(), true,
                                   corner, rf, slew, limit, slack);
   }
-  delete pins;
 }
 
 void
@@ -5277,7 +5281,7 @@ Sta::checkFanoutLimitPreamble()
   ensureClkNetwork();
 }
 
-PinSeq *
+PinSeq
 Sta::checkFanoutLimits(Net *net,
                        bool violators,
                        const MinMax *min_max)
@@ -5329,23 +5333,22 @@ Sta::checkFanout(const Pin *pin,
 
 void
 Sta::maxFanoutCheck(// Return values.
-                    Pin *&pin,
+                    const Pin *&pin,
                     float &fanout,
                     float &slack,
                     float &limit)
 {
   checkFanoutLimitPreamble();
-  PinSeq *pins = check_fanout_limits_->checkFanoutLimits(nullptr, false, MinMax::max());
+  PinSeq pins = check_fanout_limits_->checkFanoutLimits(nullptr, false, MinMax::max());
   pin = nullptr;
   fanout = 0;
   slack = INF;
   limit = INF;
-  if (!pins->empty()) {
-    pin = (*pins)[0];
+  if (!pins.empty()) {
+    pin = pins[0];
     check_fanout_limits_->checkFanout(pin, MinMax::max(),
                                       fanout, limit, slack);
   }
-  delete pins;
 }
 
 ////////////////////////////////////////////////////////////////'
@@ -5358,7 +5361,7 @@ Sta::checkCapacitanceLimitPreamble()
   ensureClkNetwork();
 }
 
-PinSeq *
+PinSeq
 Sta::checkCapacitanceLimits(Net *net,
                             bool violators,
                             const Corner *corner,
@@ -5424,27 +5427,26 @@ Sta::checkCapacitance(const Pin *pin,
 
 void
 Sta::maxCapacitanceCheck(// Return values.
-                         Pin *&pin,
+                         const Pin *&pin,
                          float &capacitance,
                          float &slack,
                          float &limit)
 {
   checkCapacitanceLimitPreamble();
-  PinSeq *pins = check_capacitance_limits_->checkCapacitanceLimits(nullptr, false,
-                                                                   nullptr,
-                                                                   MinMax::max());
+  PinSeq pins = check_capacitance_limits_->checkCapacitanceLimits(nullptr, false,
+                                                                  nullptr,
+                                                                  MinMax::max());
   pin = nullptr;
   capacitance = 0.0;
   slack = INF;
   limit = INF;
-  if (!pins->empty()) {
-    pin = (*pins)[0];
+  if (!pins.empty()) {
+    pin = pins[0];
     const Corner *corner;
     const RiseFall *rf;
     check_capacitance_limits_->checkCapacitance(pin, nullptr, MinMax::max(),
                                                 corner, rf, capacitance, limit, slack);
   }
-  delete pins;
 }
 
 ////////////////////////////////////////////////////////////////
@@ -5647,14 +5649,12 @@ Sta::power(const Corner *corner,
   power_->power(corner, total, sequential, combinational, macro, pad);
 }
 
-void
+PowerResult
 Sta::power(const Instance *inst,
-	   const Corner *corner,
-	   // Return values.
-	   PowerResult &result)
+	   const Corner *corner)
 {
   powerPreamble();
-  power_->power(inst, corner, result);
+  return power_->power(inst, corner);
 }
 
 PwrActivity

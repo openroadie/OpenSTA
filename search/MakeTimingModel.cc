@@ -43,6 +43,7 @@
 namespace sta {
 
 using std::max;
+using std::make_shared;
 
 MakeTimingModel::MakeTimingModel(const Corner *corner,
                                  Sta *sta) :
@@ -52,7 +53,8 @@ MakeTimingModel::MakeTimingModel(const Corner *corner,
   corner_(corner),
   min_max_(MinMax::max()),
   lib_builder_(new LibertyBuilder),
-  tbl_template_index_(1)
+  tbl_template_index_(1),
+  sdc_backup_(nullptr)
 {
 }
 
@@ -66,15 +68,12 @@ MakeTimingModel::makeTimingModel(const char *lib_name,
                                  const char *cell_name,
                                  const char *filename)
 {
+  saveSdc();
+
   tbl_template_index_ = 1;
   makeLibrary(lib_name, filename);
   makeCell(cell_name, filename);
   makePorts();
-
-  for (Clock *clk : *sdc_->clocks()) {
-    sta_->setPropagatedClock(clk);
-    checkClock(clk);
-  }
 
   sta_->searchPreamble();
   graph_ = sta_->graph();
@@ -83,7 +82,30 @@ MakeTimingModel::makeTimingModel(const char *lib_name,
   findClkedOutputPaths();
 
   cell_->finish(false, report_, debug_);
+  restoreSdc();
+  
   return library_;
+}
+
+// Move set_input_delay/set_output_delay/set_load's to the side.
+void
+MakeTimingModel::saveSdc()
+{
+  sdc_backup_ = new Sdc(this);
+  Sdc::movePortDelays(sdc_, sdc_backup_);
+  Sdc::movePortExtCaps(sdc_, sdc_backup_);
+  Sdc::moveDeratingFactors(sdc_, sdc_backup_);
+  sta_->delaysInvalid();
+}
+
+void
+MakeTimingModel::restoreSdc()
+{
+  Sdc::movePortDelays(sdc_backup_, sdc_);
+  Sdc::movePortExtCaps(sdc_backup_, sdc_);
+  Sdc::moveDeratingFactors(sdc_backup_, sdc_);
+  delete sdc_backup_;
+  sta_->delaysInvalid();
 }
 
 void
@@ -220,25 +242,32 @@ MakeEndTimingArcs::setInputRf(const RiseFall *input_rf)
 void
 MakeEndTimingArcs::visit(PathEnd *path_end)
 {
-  ClockEdge *tgt_clk_edge = path_end->targetClkEdge(sta_);
-  if (tgt_clk_edge) {
+  Path *src_path = path_end->path();
+  const Clock *src_clk = src_path->clock(sta_);
+  const ClockEdge *tgt_clk_edge = path_end->targetClkEdge(sta_);
+  if (src_clk == sta_->sdc()->defaultArrivalClock()
+      && tgt_clk_edge) {
+    Network *network = sta_->network();
     Debug *debug = sta_->debug();
     const MinMax *min_max = path_end->minMax(sta_);
-    debugPrint(debug, "make_timing_model", 2, "%s %s -> clock %s %s %s",
-               sta_->network()->pathName(input_pin_),
-               input_rf_->shortName(),
-               tgt_clk_edge->name(),
-               path_end->typeName(),
-               min_max->asString());
-    if (debug->check("make_timing_model", 3))
-      sta_->reportPathEnd(path_end);
-    Arrival data_delay = path_end->path()->arrival(sta_);
+    Arrival data_delay = src_path->arrival(sta_);
     Delay clk_latency = path_end->targetClkDelay(sta_);
     ArcDelay check_margin = path_end->margin(sta_);
     Delay margin = min_max == MinMax::max()
       ? data_delay - clk_latency + check_margin
       : clk_latency - data_delay + check_margin;
     float delay1 = delayAsFloat(margin, MinMax::max(), sta_);
+    debugPrint(debug, "make_timing_model", 2, "%s %s -> %s clock %s %s %s %s",
+               network->pathName(input_pin_),
+               input_rf_->shortName(),
+               network->pathName(src_path->pin(sta_)),
+               tgt_clk_edge->name(),
+               path_end->typeName(),
+               min_max->asString(),
+               delayAsString(margin, sta_));
+    if (debug->check("make_timing_model", 3))
+      sta_->reportPathEnd(path_end);
+
     RiseFallMinMax &margins = margins_[tgt_clk_edge];
     float max_margin;
     bool max_exists;
@@ -270,9 +299,9 @@ MakeTimingModel::findTimingFromInputs()
         sta_->setInputDelay(input_pin, input_rf1,
                             sdc_->defaultArrivalClock(),
                             sdc_->defaultArrivalClockEdge()->transition(),
-                            nullptr, false, false, MinMaxAll::all(), false, 0.0);
+                            nullptr, false, false, MinMaxAll::all(), true, 0.0);
 
-        PinSet *from_pins = new PinSet;
+        PinSet *from_pins = new PinSet(network_);
         from_pins->insert(input_pin);
         ExceptionFrom *from = sta_->makeExceptionFrom(from_pins, nullptr, nullptr,
                                                       input_rf1);
@@ -328,7 +357,7 @@ MakeTimingModel::makeSetupHoldTimingArcs(const Pin *input_pin,
                                          const ClockEdgeDelays &clk_margins)
 {
   for (auto clk_edge_margins : clk_margins) {
-    ClockEdge *clk_edge = clk_edge_margins.first;
+    const ClockEdge *clk_edge = clk_edge_margins.first;
     RiseFallMinMax &margins = clk_edge_margins.second;
     for (MinMax *min_max : MinMax::range()) {
       bool setup = (min_max == MinMax::max());
@@ -422,7 +451,7 @@ MakeTimingModel::findClkedOutputPaths()
       VertexPathIterator path_iter(output_vertex, this);
       while (path_iter.hasNext()) {
         PathVertex *path = path_iter.next();
-        ClockEdge *clk_edge = path->clkEdge(sta_);
+        const ClockEdge *clk_edge = path->clkEdge(sta_);
         if (clk_edge) {
           const RiseFall *output_rf = path->transition(sta_);
           const MinMax *min_max = path->minMax(sta_);
@@ -433,7 +462,7 @@ MakeTimingModel::findClkedOutputPaths()
         }
       }
       for (auto clk_edge_delay : clk_delays) {
-        ClockEdge *clk_edge = clk_edge_delay.first;
+        const ClockEdge *clk_edge = clk_edge_delay.first;
         RiseFallMinMax &delays = clk_edge_delay.second;
         for (const Pin *clk_pin : clk_edge->clock()->pins()) {
           LibertyPort *clk_port = modelPort(clk_pin);
@@ -472,7 +501,7 @@ MakeTimingModel::makeScalarCheckModel(float value,
                                       ScaleFactorType scale_factor_type,
                                       RiseFall *rf)
 {
-  Table *table = new Table0(value);
+  TablePtr table = make_shared<Table0>(value);
   TableTemplate *tbl_template =
     library_->findTableTemplate("scalar", TableTemplateType::delay);
   TableModel *table_model = new TableModel(table, tbl_template,
@@ -486,8 +515,8 @@ MakeTimingModel::makeGateModelScalar(Delay delay,
                                      Slew slew,
                                      RiseFall *rf)
 {
-  Table *delay_table = new Table0(delayAsFloat(delay));
-  Table *slew_table = new Table0(delayAsFloat(slew));
+  TablePtr delay_table = make_shared<Table0>(delayAsFloat(delay));
+  TablePtr slew_table = make_shared<Table0>(delayAsFloat(slew));
   TableTemplate *tbl_template =
     library_->findTableTemplate("scalar", TableTemplateType::delay);
   TableModel *delay_model = new TableModel(delay_table, tbl_template,
@@ -540,45 +569,46 @@ MakeTimingModel::makeGateModelTable(const Pin *output_pin,
 
               const TableModel *drvr_table = drvr_gate_model->delayModel();
               const TableAxisPtr drvr_load_axis = loadCapacitanceAxis(drvr_table);
-              const FloatSeq *drvr_axis_values = drvr_load_axis->values();
+              if (drvr_load_axis) {
+                const FloatSeq *drvr_axis_values = drvr_load_axis->values();
+                FloatSeq *load_values = new FloatSeq;
+                FloatSeq *slew_values = new FloatSeq;
+                for (size_t i = 0; i < drvr_axis_values->size(); i++) {
+                  float load_cap = (*drvr_axis_values)[i];
+                  // get slew from driver input pin
+                  ArcDelay gate_delay;
+                  Slew gate_slew;
+                  drvr_gate_model->gateDelay(drvr_cell, pvt, in_slew,
+                                             load_cap, 0.0, false,
+                                             gate_delay, gate_slew);
+                  // Remove the self delay driving the output pin net load cap.
+                  load_values->push_back(delay + gate_delay - drvr_self_delay);
+                  slew_values->push_back(gate_slew);
+                }
 
-              FloatSeq *load_values = new FloatSeq;
-              FloatSeq *slew_values = new FloatSeq;
-              for (size_t i = 0; i < drvr_axis_values->size(); i++) {
-                float load_cap = (*drvr_axis_values)[i];
-                // get slew from driver input pin
-                ArcDelay gate_delay;
-                Slew gate_slew;
-                drvr_gate_model->gateDelay(drvr_cell, pvt, in_slew,
-                                           load_cap, 0.0, false,
-                                           gate_delay, gate_slew);
-                // Remove the self delay driving the output pin net load cap.
-                load_values->push_back(delay + gate_delay - drvr_self_delay);
-                slew_values->push_back(gate_slew);
-              }
-
-              FloatSeq *axis_values = new FloatSeq(*drvr_axis_values);
-              TableAxisPtr load_axis =
-                std::make_shared<TableAxis>(TableAxisVariable::total_output_net_capacitance,
-                                            axis_values);
+                FloatSeq *axis_values = new FloatSeq(*drvr_axis_values);
+                TableAxisPtr load_axis =
+                  std::make_shared<TableAxis>(TableAxisVariable::total_output_net_capacitance,
+                                              axis_values);
           
-              Table *delay_table = new Table1(load_values, load_axis);
-              Table *slew_table = new Table1(slew_values, load_axis);
+                TablePtr delay_table = make_shared<Table1>(load_values, load_axis);
+                TablePtr slew_table = make_shared<Table1>(slew_values, load_axis);
 
-              string template_name = "template_";
-              template_name += std::to_string(tbl_template_index_++);
+                string template_name = "template_";
+                template_name += std::to_string(tbl_template_index_++);
 
-              TableTemplate *tbl_template = new TableTemplate(template_name.c_str());
-              tbl_template->setAxis1(load_axis);
-              library_->addTableTemplate(tbl_template, TableTemplateType::delay);
+                TableTemplate *tbl_template = new TableTemplate(template_name.c_str());
+                tbl_template->setAxis1(load_axis);
+                library_->addTableTemplate(tbl_template, TableTemplateType::delay);
 
-              TableModel *delay_model = new TableModel(delay_table, tbl_template,
-                                                       ScaleFactorType::cell, rf);
-              TableModel *slew_model = new TableModel(slew_table, tbl_template,
-                                                      ScaleFactorType::cell, rf);
-              GateTableModel *gate_model = new GateTableModel(delay_model, nullptr,
-                                                              slew_model, nullptr);
-              return gate_model;
+                TableModel *delay_model = new TableModel(delay_table, tbl_template,
+                                                         ScaleFactorType::cell, rf);
+                TableModel *slew_model = new TableModel(slew_table, tbl_template,
+                                                        ScaleFactorType::cell, rf);
+                GateTableModel *gate_model = new GateTableModel(delay_model, nullptr,
+                                                                slew_model, nullptr);
+                return gate_model;
+              }
             }
           }
         }
@@ -593,11 +623,14 @@ MakeTimingModel::makeGateModelTable(const Pin *output_pin,
 TableAxisPtr
 MakeTimingModel::loadCapacitanceAxis(const TableModel *table)
 {
-  if (table->axis1()->variable() == TableAxisVariable::total_output_net_capacitance)
+  if (table->axis1()
+      && table->axis1()->variable() == TableAxisVariable::total_output_net_capacitance)
     return table->axis1();
-  else if (table->axis2()->variable() == TableAxisVariable::total_output_net_capacitance)
+  else if (table->axis2()
+           && table->axis2()->variable() == TableAxisVariable::total_output_net_capacitance)
     return table->axis2();
-  else if (table->axis3()->variable() == TableAxisVariable::total_output_net_capacitance)
+  else if (table->axis3()
+           && table->axis3()->variable() == TableAxisVariable::total_output_net_capacitance)
     return table->axis3();
   else
     return nullptr;

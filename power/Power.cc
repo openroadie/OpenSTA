@@ -74,6 +74,7 @@ Power::Power(StaState *sta) :
   StaState(sta),
   global_activity_{0.0, 0.0, PwrActivityOrigin::unknown},
   input_activity_{0.1, 0.5, PwrActivityOrigin::input},
+  seq_activity_map_(100, SeqPinHash(network_), SeqPinEqual()),
   activities_valid_(false)
 {
 }
@@ -173,10 +174,15 @@ Power::seqActivity(const Instance *reg,
   return seq_activity_map_[SeqPin(reg, output)];
 }
 
+SeqPinHash::SeqPinHash(const Network *network) :
+  network_(network)
+{
+}
+
 size_t
 SeqPinHash::operator()(const SeqPin &pin) const
 {
-  return hashSum(hashPtr(pin.first), hashPtr(pin.second));
+  return hashSum(network_->id(pin.first), pin.second->id());
 }
 
 bool
@@ -210,8 +216,7 @@ Power::power(const Corner *corner,
     Instance *inst = inst_iter->next();
     LibertyCell *cell = network_->libertyCell(inst);
     if (cell) {
-      PowerResult inst_power;
-      power(inst, cell, corner, inst_power);
+      PowerResult inst_power = power(inst, cell, corner);
       if (cell->isMacro()
 	  || cell->isMemory())
 	macro.incr(inst_power);
@@ -227,17 +232,42 @@ Power::power(const Corner *corner,
   delete inst_iter;
 }
 
-void
+PowerResult
 Power::power(const Instance *inst,
-	     const Corner *corner,
-	     // Return values.
-	     PowerResult &result)
+	     const Corner *corner)
 {
+  if (network_->isHierarchical(inst)) {
+    PowerResult result;
+    powerInside(inst, corner, result);
+    return result;
+  }
   LibertyCell *cell = network_->libertyCell(inst);
   if (cell) {
     ensureActivities();
-    power(inst, cell, corner, result);
+    return power(inst, cell, corner);
   }
+  return PowerResult();
+}
+
+void
+Power::powerInside(const Instance *hinst,
+                   const Corner *corner,
+                   PowerResult &result)
+{
+  InstanceChildIterator *child_iter = network_->childIterator(hinst);
+  while (child_iter->hasNext()) {
+    Instance *child = child_iter->next();
+    if (network_->isHierarchical(child))
+      powerInside(child, corner, result);
+    else {
+      LibertyCell *cell = network_->libertyCell(child);
+      if (cell) {
+        PowerResult inst_power = power(child, cell, corner);
+        result.incr(inst_power);
+      }
+    }
+  }
+  delete child_iter;
 }
 
 ////////////////////////////////////////////////////////////////
@@ -306,7 +336,7 @@ PropActivityVisitor::copy() const
 void
 PropActivityVisitor::init()
 {
-  visited_regs_ = new InstanceSet;
+  visited_regs_ = new InstanceSet(network_);
   found_reg_without_activity_ = false;
 }
 
@@ -395,23 +425,24 @@ PropActivityVisitor::visit(Vertex *vertex)
     }
   }
   LibertyCell *cell = network_->libertyCell(inst);
-  if (network_->isLoad(pin)) {
-    if (cell && cell->hasSequentials()) {
+  if (network_->isLoad(pin) && cell) {
+    if (cell->hasSequentials()) {
       debugPrint(debug_, "power_activity", 3, "pending seq %s",
                  network_->pathName(inst));
       visited_regs_->insert(inst);
       found_reg_without_activity_ |= input_without_activity;
     }
+    // Gated clock cells latch the enable so there is no EN->GCLK timing arc.
+    if (cell->isClockGate()) {
+      const Pin *enable, *clk, *gclk;
+      power_->clockGatePins(inst, enable, clk, gclk);
+      if (gclk) {
+        Vertex *gclk_vertex = graph_->pinDrvrVertex(gclk);
+        bfs_->enqueue(gclk_vertex);
+      }
+    }
   }
   bfs_->enqueueAdjacentVertices(vertex);
-
-  // Gated clock cells latch the enable so there is no EN->GCLK timing arc.
-  if (cell && cell->isClockGate()) {
-    const Pin *enable, *clk, *gclk;
-    power_->clockGatePins(inst, enable, clk, gclk);
-    Vertex *gclk_vertex = graph_->pinDrvrVertex(gclk);
-    bfs_->enqueue(gclk_vertex);
-  }
 }
 
 void
@@ -545,7 +576,7 @@ Power::ensureActivities()
 	InstanceSet *regs = visitor.stealVisitedRegs();
 	InstanceSet::Iterator reg_iter(regs);
 	while (reg_iter.hasNext()) {
-	  Instance *reg = reg_iter.next();
+	  const Instance *reg = reg_iter.next();
 	  // Propagate activiities across register D->Q.
 	  seedRegOutputActivities(reg, bfs);
 	}
@@ -635,13 +666,12 @@ Power::seedRegOutputActivities(const Instance *reg,
 
 ////////////////////////////////////////////////////////////////
 
-void
+PowerResult
 Power::power(const Instance *inst,
 	     LibertyCell *cell,
-	     const Corner *corner,
-	     // Return values.
-	     PowerResult &result)
+	     const Corner *corner)
 {
+  PowerResult result;
   MinMax *mm = MinMax::max();
   const DcalcAnalysisPt *dcalc_ap = corner->findDcalcAnalysisPt(mm);
   const Clock *inst_clk = findInstClk(inst);
@@ -666,6 +696,7 @@ Power::power(const Instance *inst,
   }
   delete pin_iter;
   findLeakagePower(inst, cell, corner, result);
+  return result;
 }
 
 const Clock *

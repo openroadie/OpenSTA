@@ -132,8 +132,7 @@ public:
 		 const char *filename);
   virtual ~LibertyLibrary();
   LibertyCell *findLibertyCell(const char *name) const;
-  void findLibertyCellsMatching(PatternMatch *pattern,
-				LibertyCellSeq *cells);
+  LibertyCellSeq findLibertyCellsMatching(PatternMatch *pattern);
   // Liberty cells that are buffers.
   LibertyCellSeq *buffers();
 
@@ -179,7 +178,7 @@ public:
 			float wire_delay) const;
   // Check for supported axis variables.
   // Return true if axes are supported.
-  static bool checkSlewDegradationAxes(Table *table);
+  static bool checkSlewDegradationAxes(TablePtr table);
 
   float defaultInputPinCap() const { return default_input_pin_cap_; }
   void setDefaultInputPinCap(float cap);
@@ -398,8 +397,7 @@ public:
   LibertyLibrary *libertyLibrary() const { return liberty_library_; }
   LibertyLibrary *libertyLibrary() { return liberty_library_; }
   LibertyPort *findLibertyPort(const char *name) const;
-  void findLibertyPortsMatching(PatternMatch *pattern,
-				LibertyPortSeq *ports) const;
+  LibertyPortSeq findLibertyPortsMatching(PatternMatch *pattern) const;
   bool hasInternalPorts() const { return has_internal_ports_; }
   LibertyPgPort *findPgPort(const char *name) const;
   size_t pgPortCount() const { return pg_port_map_.size(); }
@@ -842,9 +840,8 @@ private:
   friend class LibertyReader;
 };
 
-void
-sortLibertyPortSet(LibertyPortSet *set,
-		   LibertyPortSeq &ports);
+LibertyPortSeq
+sortByName(const LibertyPortSet *set);
 
 class LibertyPortMemberIterator : public Iterator<LibertyPort*>
 {
@@ -1050,18 +1047,18 @@ public:
   OcvDerate(const char *name);
   ~OcvDerate();
   const char *name() const { return name_; }
-  Table *derateTable(const RiseFall *rf,
-		     const EarlyLate *early_late,
-		     PathType path_type);
+  TablePtr derateTable(const RiseFall *rf,
+                       const EarlyLate *early_late,
+                       PathType path_type);
   void setDerateTable(const RiseFall *rf,
 		      const EarlyLate *early_late,
 		      PathType path_type,
-		      Table *derate);
+		      TablePtr derate);
 
 private:
   const char *name_;
   // [rf_type][derate_type][path_type]
-  Table *derate_[RiseFall::index_count][EarlyLate::index_count][path_type_count];
+  TablePtr derate_[RiseFall::index_count][EarlyLate::index_count][path_type_count];
 };
 
 // Power/ground port.

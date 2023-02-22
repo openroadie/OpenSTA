@@ -104,24 +104,24 @@ protected:
 			  ArcDelayCalc *arc_delay_calc);
   void seedLoadSlew(Vertex *vertex);
   void setInputPortWireDelays(Vertex *vertex);
-  void findInputDriverDelay(LibertyCell *drvr_cell,
+  void findInputDriverDelay(const LibertyCell *drvr_cell,
 			    const Pin *drvr_pin,
 			    Vertex *drvr_vertex,
 			    const RiseFall *rf,
-			    LibertyPort *from_port,
+			    const LibertyPort *from_port,
 			    float *from_slews,
-			    LibertyPort *to_port,
-			    DcalcAnalysisPt *dcalc_ap);
-  LibertyPort *driveCellDefaultFromPort(LibertyCell *cell,
-					LibertyPort *to_port);
-  int findPortIndex(LibertyCell *cell,
-		    LibertyPort *port);
-  void findInputArcDelay(LibertyCell *drvr_cell,
+			    const LibertyPort *to_port,
+			    const DcalcAnalysisPt *dcalc_ap);
+  LibertyPort *driveCellDefaultFromPort(const LibertyCell *cell,
+					const LibertyPort *to_port);
+  int findPortIndex(const LibertyCell *cell,
+		    const LibertyPort *port);
+  void findInputArcDelay(const LibertyCell *drvr_cell,
 			 const Pin *drvr_pin,
 			 Vertex *drvr_vertex,
-			 TimingArc *arc,
+			 const TimingArc *arc,
 			 float from_slew,
-			 DcalcAnalysisPt *dcalc_ap);
+			 const DcalcAnalysisPt *dcalc_ap);
   bool findDriverDelays(Vertex *drvr_vertex,
 			ArcDelayCalc *arc_delay_calc);
   bool findDriverDelays1(Vertex *drvr_vertex,
@@ -172,19 +172,19 @@ protected:
 			      // Return values.
 			      ArcDelay &parallel_delay,
 			      Slew &parallel_slew);
-  void multiDrvrGateDelay(MultiDrvrNet *multi_drvr,
-			  LibertyCell *drvr_cell,
-			  const Pin *drvr_pin,
-			  TimingArc *arc,
-			  const Pvt *pvt,
-			  const DcalcAnalysisPt *dcalc_ap,
-			  const Slew from_slew,
-			  Parasitic *drvr_parasitic,
-			  float related_out_cap,
-			  ArcDelayCalc *arc_delay_calc,
-			  // Return values.
-			  ArcDelay &gate_delay,
-			  Slew &gate_slew);
+  void parallelGateDelay(MultiDrvrNet *multi_drvr,
+                         LibertyCell *drvr_cell,
+                         const Pin *drvr_pin,
+                         TimingArc *arc,
+                         const Pvt *pvt,
+                         const DcalcAnalysisPt *dcalc_ap,
+                         const Slew from_slew,
+                         Parasitic *drvr_parasitic,
+                         float related_out_cap,
+                         ArcDelayCalc *arc_delay_calc,
+                         // Return values.
+                         ArcDelay &gate_delay,
+                         Slew &gate_slew);
   void deleteMultiDrvrNets();
   Slew edgeFromSlew(const Vertex *from_vertex,
 		    const RiseFall *from_rf,
